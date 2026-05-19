@@ -1,34 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator,
-  SafeAreaView, Platform, Alert, PermissionsAndroid, TextInput
+  SafeAreaView, Platform, Alert, TextInput
 } from 'react-native';
 import { initContext } from 'whisper.rn';
 import { pick, types } from '@react-native-documents/picker';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Share from 'react-native-share';
 import RNFS from 'react-native-fs';
-import Sound, {
-  AudioEncoderAndroidType, AudioSourceAndroidType, AVEncoderAudioQualityIOSType, AVEncodingOption,
-} from 'react-native-nitro-sound';
-const audioRecorderPlayer = Sound;
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Import ikon z lucide-react-native
-import { Play, Pause, Upload, Copy, Share2, Check, Save, Mic, Square, Search, X, History, FileText } from 'lucide-react-native';
+import { Upload, Copy, Share2, Check, Save, Search, X, History, FileText, Mic } from 'lucide-react-native';
 
-const audioRecorderPlayer = new AudioRecorderPlayer();
-
-// --- KOLORYSTYKA NOODLE EARS ---
 const COLORS = {
-  purpleDark: '#3B0764',   // Głęboka purpura (tło nagłówka)
-  purpleMain: '#6B21A8',   // Główna purpura (przyciski)
-  purpleLight: '#F3E8FF',  // Jasna purpura (tła kafelków)
-  goldMain: '#D4AF37',     // Złoty klasyczny (akcenty)
-  goldLight: '#FEF08A',    // Jasny złoty (podświetlenia wyszukiwania)
-  textDark: '#1F2937',     // Ciemny szary (zwykły tekst)
+  purpleDark: '#3B0764',
+  purpleMain: '#6B21A8',
+  purpleLight: '#F3E8FF',
+  goldMain: '#D4AF37',
+  goldLight: '#FEF08A',
+  textDark: '#1F2937',
   white: '#FFFFFF',
-  red: '#EF4444'
 };
 
 export default function App() {
@@ -38,18 +29,10 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [whisperContext, setWhisperContext] = useState(null);
 
-  // Stany dla dyktafonu i odtwarzacza
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordTime, setRecordTime] = useState('00:00:00');
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playPositionMs, setPlayPositionMs] = useState(0);
-
-  // Stany dla Wyszukiwarki i Historii
   const [searchQuery, setSearchQuery] = useState('');
   const [history, setHistory] = useState([]);
-  const [currentTab, setCurrentTab] = useState('NEW'); // 'NEW' lub 'HISTORY'
+  const [currentTab, setCurrentTab] = useState('NEW');
 
-  // Inicjalizacja modelu i ładowanie historii
   useEffect(() => {
     const initWhisper = async () => {
       try {
@@ -61,19 +44,13 @@ export default function App() {
     };
     initWhisper();
     loadHistory();
-
-    return () => {
-      audioRecorderPlayer.stopPlayer();
-      audioRecorderPlayer.removePlayBackListener();
-    };
   }, []);
 
-  // --- HISTORIA (ARCHIWUM) ---
   const loadHistory = async () => {
     try {
       const saved = await AsyncStorage.getItem('@noodleEars_history');
       if (saved !== null) setHistory(JSON.parse(saved));
-    } catch (e) { console.error("Błąd ładowania historii", e); }
+    } catch (e) {}
   };
 
   const saveToHistory = async (newTranscription, fileName) => {
@@ -87,12 +64,12 @@ export default function App() {
       const updatedHistory = [newItem, ...history];
       setHistory(updatedHistory);
       await AsyncStorage.setItem('@noodleEars_history', JSON.stringify(updatedHistory));
-    } catch (e) { console.error("Błąd zapisu historii", e); }
+    } catch (e) {}
   };
 
   const loadFromHistory = (item) => {
     setTranscription(item.data);
-    setAudioFile({ name: item.name, uri: null }); // URI jest null, bo plik audio mógł zostać usunięty, ale mamy tekst!
+    setAudioFile({ name: item.name, uri: null });
     setCurrentTab('NEW');
   };
 
@@ -106,77 +83,13 @@ export default function App() {
     ]);
   };
 
-  // --- NAGRYWANIE ---
- const startRecording = async () => {
-  try {
-    if (Platform.OS === 'android') {
-      const grants = await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-        PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-      ]);
-      if (grants['android.permission.RECORD_AUDIO'] !== PermissionsAndroid.RESULTS.GRANTED) return;
-    }
-    setAudioFile(null); setTranscription([]); setPlayPositionMs(0); setIsRecording(true);
-    const path = Platform.select({
-      ios: 'wywiad.m4a',
-      android: `${RNFS.CachesDirectoryPath}/wywiad.mp4`
-    });
-    await audioRecorderPlayer.startRecorder(path);
-    audioRecorderPlayer.addRecordBackListener((e) => {
-      setRecordTime(audioRecorderPlayer.mmssss(Math.floor(e.currentPosition)));
-    });
-  } catch (error) { setIsRecording(false); }
-};
-
-  const stopRecording = async () => {
-    setIsRecording(false);
+  const handleFileSelect = async () => {
     try {
-      const result = await audioRecorderPlayer.stopRecorder();
-      audioRecorderPlayer.removeRecordBackListener();
-      setRecordTime('00:00:00');
-      setAudioFile({ uri: result, name: `Nagranie_${new Date().getHours()}${new Date().getMinutes()}.mp4`, type: 'audio/mp4' });
-    } catch (error) {}
+      const [res] = await pick({ type: [types.audio] });
+      setAudioFile({ uri: res.uri, name: res.name }); 
+      setTranscription([]);
+    } catch (err) {}
   };
-
-  // --- ODTWARZACZ ---
-  const togglePlayback = async () => {
-    if (!audioFile || !audioFile.uri) {
-       Alert.alert("Informacja", "Ten plik pochodzi z archiwum, plik audio nie jest już dostępny na urządzeniu."); return;
-    }
-    if (isPlaying) {
-      await audioRecorderPlayer.pausePlayer(); setIsPlaying(false);
-    } else {
-      setIsPlaying(true);
-      await audioRecorderPlayer.startPlayer(audioFile.uri);
-      audioRecorderPlayer.addPlayBackListener((e) => {
-        setPlayPositionMs(e.currentPosition);
-        if (e.currentPosition === e.duration) { setIsPlaying(false); audioRecorderPlayer.stopPlayer(); }
-      });
-    }
-  };
-
-  const playFromSegment = async (startTimeMs) => {
-    if (!audioFile || !audioFile.uri) return;
-    setIsPlaying(true);
-    await audioRecorderPlayer.startPlayer(audioFile.uri);
-    await audioRecorderPlayer.seekToPlayer(startTimeMs);
-    audioRecorderPlayer.addPlayBackListener((e) => {
-      setPlayPositionMs(e.currentPosition);
-      if (e.currentPosition === e.duration) { setIsPlaying(false); audioRecorderPlayer.stopPlayer(); }
-    });
-  };
-
-  // --- TRANSKRYPCJA, KOPIOWANIE, ZAPIS ---
- const handleFileSelect = async () => {
-  try {
-    const [res] = await pick({ type: [types.audio] });
-    setAudioFile({ uri: res.uri, name: res.name, type: res.type });
-    setTranscription([]);
-    setPlayPositionMs(0);
-    if (isPlaying) { await audioRecorderPlayer.stopPlayer(); setIsPlaying(false); }
-  } catch (err) {}
-};
 
   const startTranscription = async () => {
     if (!audioFile || !audioFile.uri || !whisperContext) return;
@@ -187,9 +100,9 @@ export default function App() {
       const result = await promise;
       if (result && result.segments) {
         setTranscription(result.segments);
-        saveToHistory(result.segments, audioFile.name); // Zapis do archiwum po udanej transkrypcji!
+        saveToHistory(result.segments, audioFile.name);
       }
-    } catch (error) { Alert.alert("Błąd", "Wystąpił problem."); } 
+    } catch (error) { Alert.alert("Błąd", "Wystąpił problem podczas transkrypcji."); } 
     finally { setIsTranscribing(false); }
   };
 
@@ -220,22 +133,14 @@ export default function App() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // --- FUNKCJA WYSZUKIWARKI: Podświetlanie Słów ---
   const renderHighlightedText = (text, query) => {
     if (!query.trim()) return <Text style={styles.segmentText}>{text}</Text>;
-    
-    // Rozbijanie tekstu na tablicę w miejscach szukanego słowa (niezależnie od wielkości liter)
     const regex = new RegExp(`(${query})`, 'gi');
     const parts = text.split(regex);
-    
     return (
       <Text style={styles.segmentText}>
         {parts.map((part, index) => 
-          regex.test(part) ? (
-            <Text key={index} style={styles.highlightedWord}>{part}</Text>
-          ) : (
-            <Text key={index}>{part}</Text>
-          )
+          regex.test(part) ? <Text key={index} style={styles.highlightedWord}>{part}</Text> : <Text key={index}>{part}</Text>
         )}
       </Text>
     );
@@ -243,14 +148,11 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* NAGŁÓWEK */}
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
           <Text style={styles.headerTitle}>noodleEars</Text>
           <Text style={styles.headerDot}>.</Text>
         </View>
-        
-        {/* ZAKŁADKI */}
         <View style={styles.tabsContainer}>
           <TouchableOpacity style={[styles.tab, currentTab === 'NEW' && styles.activeTab]} onPress={() => setCurrentTab('NEW')}>
             <Mic size={16} color={currentTab === 'NEW' ? COLORS.goldMain : COLORS.purpleLight} />
@@ -266,38 +168,17 @@ export default function App() {
       {currentTab === 'NEW' ? (
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           
-          <View style={styles.inputRow}>
-            <TouchableOpacity style={[styles.inputBox, isRecording && styles.disabledBox]} onPress={handleFileSelect} disabled={isRecording}>
-              <Upload size={30} color={COLORS.purpleMain} />
-              <Text style={styles.inputText}>Wgraj plik</Text>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.mainUploadBox} onPress={handleFileSelect}>
+            <Upload size={36} color={COLORS.purpleMain} />
+            <Text style={styles.inputText}>Wgraj plik audio do transkrypcji</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.inputBox, isRecording ? styles.recordingBox : styles.micBox]} onPress={isRecording ? stopRecording : startRecording}>
-              {isRecording ? <Square size={30} color={COLORS.white} /> : <Mic size={30} color={COLORS.red} />}
-              <Text style={[styles.inputText, isRecording && styles.recordingText]}>{isRecording ? "Zatrzymaj" : "Dyktafon"}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {isRecording && (
-            <View style={styles.activeRecordingCard}>
-              <View style={styles.recordingDot} />
-              <Text style={styles.recordingTimeText}>{recordTime}</Text>
-            </View>
-          )}
-
-          {audioFile && !isRecording && (
+          {audioFile && (
             <View style={styles.optionsCard}>
               <Text style={styles.fileNameText}>{audioFile.name}</Text>
               
-              <View style={styles.playerRow}>
-                <TouchableOpacity style={[styles.playButton, !audioFile.uri && styles.disabledButton]} onPress={togglePlayback}>
-                  {isPlaying ? <Pause size={24} color={COLORS.white} /> : <Play size={24} color={COLORS.goldMain} style={{marginLeft: 4}} />}
-                </TouchableOpacity>
-                <Text style={styles.playTimeText}>{formatTime(playPositionMs / 1000)}</Text>
-              </View>
-
               {!transcription.length > 0 && (
-                <TouchableOpacity style={[styles.primaryButton, isTranscribing && styles.disabledButton]} onPress={startTranscription} disabled={isTranscribing}>
+                <TouchableOpacity style={styles.primaryButton} onPress={startTranscription} disabled={isTranscribing}>
                   {isTranscribing ? (
                     <View style={styles.loadingContainer}>
                       <ActivityIndicator color={COLORS.white} style={{marginRight: 10}} />
@@ -309,10 +190,8 @@ export default function App() {
             </View>
           )}
 
-          {/* WYNIKI I WYSZUKIWARKA */}
           {transcription.length > 0 && (
             <View style={styles.resultsCard}>
-              
               <View style={styles.resultsHeader}>
                 <Text style={styles.resultsTitle}>Twój tekst</Text>
                 <View style={styles.actionButtons}>
@@ -326,7 +205,6 @@ export default function App() {
                 </View>
               </View>
 
-              {/* Pasek Wyszukiwania */}
               <View style={styles.searchContainer}>
                 <Search size={20} color={COLORS.purpleMain} style={styles.searchIcon}/>
                 <TextInput 
@@ -337,29 +215,22 @@ export default function App() {
                   onChangeText={setSearchQuery}
                 />
                 {searchQuery !== '' && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')} style={{padding: 4}}>
-                    <X size={16} color="#9CA3AF" />
-                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setSearchQuery('')} style={{padding: 4}}><X size={16} color="#9CA3AF" /></TouchableOpacity>
                 )}
               </View>
 
               <View style={styles.transcriptionContainer}>
-                {transcription.map((segment, index) => {
-                  const isActive = playPositionMs >= segment.start && playPositionMs <= segment.end;
-                  return (
-                    <TouchableOpacity key={index} style={[styles.segmentRow, isActive && styles.activeSegment]} onPress={() => playFromSegment(segment.start)}>
-                      <Text style={[styles.timestampText, isActive && styles.activeTimestamp]}>{formatTime(segment.start / 1000)}</Text>
-                      {/* Generowanie podświetlonego tekstu: */}
-                      {renderHighlightedText(segment.text.trim(), searchQuery)}
-                    </TouchableOpacity>
-                  );
-                })}
+                {transcription.map((segment, index) => (
+                  <View key={index} style={styles.segmentRow}>
+                    <Text style={styles.timestampText}>{formatTime(segment.start / 1000)}</Text>
+                    {renderHighlightedText(segment.text.trim(), searchQuery)}
+                  </View>
+                ))}
               </View>
             </View>
           )}
         </ScrollView>
       ) : (
-        /* WIDOK ARCHIWUM */
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.historyHeader}>
             <Text style={styles.historyTitle}>Zapisane Wywiady</Text>
@@ -367,7 +238,6 @@ export default function App() {
               <TouchableOpacity onPress={clearHistory}><Text style={styles.clearHistoryText}>Wyczyść</Text></TouchableOpacity>
             )}
           </View>
-          
           {history.length === 0 ? (
             <Text style={styles.emptyHistory}>Twoje archiwum jest puste.</Text>
           ) : (
@@ -393,61 +263,37 @@ const styles = StyleSheet.create({
   headerTitleRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 20 },
   headerTitle: { color: COLORS.white, fontSize: 28, fontWeight: '900', letterSpacing: -1 },
   headerDot: { color: COLORS.goldMain, fontSize: 34, fontWeight: '900', lineHeight: 30 },
-  
   tabsContainer: { flexDirection: 'row', gap: 20 },
   tab: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 6, borderBottomWidth: 3, borderBottomColor: 'transparent' },
   activeTab: { borderBottomColor: COLORS.goldMain },
   tabText: { color: COLORS.purpleLight, fontSize: 15, fontWeight: '600' },
   activeTabText: { color: COLORS.goldMain },
-
   scrollContainer: { padding: 20, gap: 16 },
   
-  inputRow: { flexDirection: 'row', gap: 12 },
-  inputBox: { flex: 1, backgroundColor: COLORS.purpleLight, borderWidth: 1, borderColor: '#E9D5FF', borderRadius: 16, padding: 20, alignItems: 'center', justifyContent: 'center' },
-  micBox: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
-  recordingBox: { backgroundColor: COLORS.red, borderColor: COLORS.red },
-  inputText: { fontSize: 14, fontWeight: '700', color: COLORS.purpleDark, marginTop: 8 },
-  recordingText: { color: COLORS.white },
-  disabledBox: { opacity: 0.5 },
-
-  activeRecordingCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FEE2E2', borderRadius: 12, padding: 16, gap: 10 },
-  recordingDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.red },
-  recordingTimeText: { fontSize: 24, fontWeight: 'bold', color: '#7F1D1D', fontVariant: ['tabular-nums'] },
-
+  mainUploadBox: { backgroundColor: COLORS.purpleLight, borderWidth: 2, borderStyle: 'dashed', borderColor: '#D8B4FE', borderRadius: 16, padding: 30, alignItems: 'center', justifyContent: 'center' },
+  inputText: { fontSize: 16, fontWeight: '700', color: COLORS.purpleDark, marginTop: 12 },
+  
   optionsCard: { backgroundColor: COLORS.white, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
   fileNameText: { fontSize: 14, color: '#6B7280', marginBottom: 16, textAlign: 'center', fontWeight: '500' },
-  
-  playerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12, marginBottom: 16, gap: 16 },
-  playButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.purpleMain, alignItems: 'center', justifyContent: 'center' },
-  playTimeText: { fontSize: 18, fontWeight: '700', color: COLORS.textDark, fontVariant: ['tabular-nums'], minWidth: 60 },
-
   primaryButton: { backgroundColor: COLORS.goldMain, borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: COLORS.goldMain, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  disabledButton: { backgroundColor: '#D1D5DB', shadowOpacity: 0 },
   buttonText: { color: COLORS.purpleDark, fontSize: 16, fontWeight: '800' },
   loadingContainer: { flexDirection: 'row', alignItems: 'center' },
-
+  
   resultsCard: { backgroundColor: COLORS.white, borderRadius: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2, marginBottom: 40 },
   resultsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', backgroundColor: '#FAFAFA', borderTopLeftRadius: 16, borderTopRightRadius: 16 },
   resultsTitle: { fontSize: 16, fontWeight: '800', color: COLORS.purpleDark },
   actionButtons: { flexDirection: 'row', gap: 8 },
   actionButton: { backgroundColor: '#F3F4F6', padding: 10, borderRadius: 8 },
   shareBtn: { backgroundColor: COLORS.purpleMain },
-  
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', margin: 16, borderRadius: 12, paddingHorizontal: 12 },
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: COLORS.textDark },
-
   transcriptionContainer: { paddingHorizontal: 16, paddingBottom: 16 },
   segmentRow: { flexDirection: 'row', marginBottom: 12, padding: 8, borderRadius: 8, gap: 10 },
-  activeSegment: { backgroundColor: COLORS.purpleLight },
-  
   timestampText: { fontSize: 12, color: COLORS.purpleMain, backgroundColor: '#E9D5FF', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start', fontWeight: '700' },
-  activeTimestamp: { backgroundColor: COLORS.purpleMain, color: COLORS.white },
-  
   segmentText: { flex: 1, fontSize: 15, color: COLORS.textDark, lineHeight: 24 },
   highlightedWord: { backgroundColor: COLORS.goldLight, fontWeight: 'bold' },
-
-  // STYLE ARCHIWUM
+  
   historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10 },
   historyTitle: { fontSize: 20, fontWeight: '800', color: COLORS.purpleDark },
   clearHistoryText: { color: COLORS.red, fontWeight: '600' },
