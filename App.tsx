@@ -8,9 +8,10 @@ import { pick, types } from '@react-native-documents/picker';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Share from 'react-native-share';
 import RNFS from 'react-native-fs';
-import AudioRecorderPlayer, {
+import Sound, {
   AudioEncoderAndroidType, AudioSourceAndroidType, AVEncoderAudioQualityIOSType, AVEncodingOption,
-} from 'react-native-audio-recorder-player';
+} from 'react-native-nitro-sound';
+const audioRecorderPlayer = Sound;
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Import ikon z lucide-react-native
@@ -106,23 +107,27 @@ export default function App() {
   };
 
   // --- NAGRYWANIE ---
-  const startRecording = async () => {
-    try {
-      if (Platform.OS === 'android') {
-        const grants = await PermissionsAndroid.requestMultiple([
-          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE, PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE, PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-        ]);
-        if (grants['android.permission.RECORD_AUDIO'] !== PermissionsAndroid.RESULTS.GRANTED) return;
-      }
-      setAudioFile(null); setTranscription([]); setPlayPositionMs(0); setIsRecording(true);
-      const path = Platform.select({ ios: 'wywiad.m4a', android: `${RNFS.CachesDirectoryPath}/wywiad.mp4` });
-      await audioRecorderPlayer.startRecorder(path, {
-        AudioEncoderAndroid: AudioEncoderAndroidType.AAC, AudioSourceAndroid: AudioSourceAndroidType.MIC,
-        AVEncoderAudioQualityKeyIOS: AVEncoderAudioQualityIOSType.high, AVNumberOfChannelsKeyIOS: 2, AVFormatIDKeyIOS: AVEncodingOption.aac,
-      });
-      audioRecorderPlayer.addRecordBackListener((e) => setRecordTime(audioRecorderPlayer.mmssss(Math.floor(e.currentPosition))));
-    } catch (error) { setIsRecording(false); }
-  };
+ const startRecording = async () => {
+  try {
+    if (Platform.OS === 'android') {
+      const grants = await PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+        PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+      ]);
+      if (grants['android.permission.RECORD_AUDIO'] !== PermissionsAndroid.RESULTS.GRANTED) return;
+    }
+    setAudioFile(null); setTranscription([]); setPlayPositionMs(0); setIsRecording(true);
+    const path = Platform.select({
+      ios: 'wywiad.m4a',
+      android: `${RNFS.CachesDirectoryPath}/wywiad.mp4`
+    });
+    await audioRecorderPlayer.startRecorder(path);
+    audioRecorderPlayer.addRecordBackListener((e) => {
+      setRecordTime(audioRecorderPlayer.mmssss(Math.floor(e.currentPosition)));
+    });
+  } catch (error) { setIsRecording(false); }
+};
 
   const stopRecording = async () => {
     setIsRecording(false);
