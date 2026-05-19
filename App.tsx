@@ -4,7 +4,7 @@ import {
   SafeAreaView, Platform, Alert, PermissionsAndroid, TextInput
 } from 'react-native';
 import { initContext } from 'whisper.rn';
-import DocumentPicker from 'react-native-document-picker';
+import { pick, types } from '@react-native-documents/picker';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Share from 'react-native-share';
 import RNFS from 'react-native-fs';
@@ -163,13 +163,15 @@ export default function App() {
   };
 
   // --- TRANSKRYPCJA, KOPIOWANIE, ZAPIS ---
-  const handleFileSelect = async () => {
-    try {
-      const res = await DocumentPicker.pickSingle({ type: [DocumentPicker.types.audio] });
-      setAudioFile(res); setTranscription([]); setPlayPositionMs(0);
-      if (isPlaying) { await audioRecorderPlayer.stopPlayer(); setIsPlaying(false); }
-    } catch (err) {}
-  };
+ const handleFileSelect = async () => {
+  try {
+    const [res] = await pick({ type: [types.audio] });
+    setAudioFile({ uri: res.uri, name: res.name, type: res.type });
+    setTranscription([]);
+    setPlayPositionMs(0);
+    if (isPlaying) { await audioRecorderPlayer.stopPlayer(); setIsPlaying(false); }
+  } catch (err) {}
+};
 
   const startTranscription = async () => {
     if (!audioFile || !audioFile.uri || !whisperContext) return;
