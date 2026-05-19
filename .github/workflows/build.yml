@@ -1,0 +1,29 @@
+steps:
+  - name: Pobranie kodu z repozytorium
+    uses: actions/checkout@v4
+
+  - name: Przygotowanie środowiska Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: '18'
+
+  - name: Przygotowanie środowiska Java (wymagane dla Androida)
+    uses: actions/setup-java@v4
+    with:
+      distribution: 'zulu'
+      java-version: '17'
+
+  - name: Instalacja zależności npm
+    run: npm install
+
+  - name: Budowanie pliku APK (Wersja Debug do łatwej instalacji)
+    run: |
+      cd android
+      chmod +x ./gradlew
+      ./gradlew assembleDebug
+
+  - name: Udostępnienie gotowego pliku APK do pobrania
+    uses: actions/upload-artifact@v4
+    with:
+      name: WhisperApp-APK
+      path: android/app/build/outputs/apk/debug/app-debug.apk
