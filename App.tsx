@@ -29,19 +29,48 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [whisperContext, setWhisperContext] = useState(null);
 
+  // Stany pobierania
+  const [isDownloadingModel, setIsDownloadingModel] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [history, setHistory] = useState([]);
   const [currentTab, setCurrentTab] = useState('NEW');
 
   useEffect(() => {
     const initWhisper = async () => {
+      // Zapisujemy model bezpośrednio w pamięci wewnętrznej telefonu
+      const modelPath = `${RNFS.DocumentDirectoryPath}/ggml-base.bin`;
+      
       try {
-        const ctx = await initContext({ filePath: 'ggml-base.bin', isModelInAssets: true });
+        const exists = await RNFS.exists(modelPath);
+        
+        // Jeśli nie mamy jeszcze modelu, pobieramy go
+        if (!exists) {
+          setIsDownloadingModel(true);
+          const download = RNFS.downloadFile({
+            fromUrl: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
+            toFile: modelPath,
+            progressDivider: 1,
+            progress: (res) => {
+              const percent = Math.round((res.bytesWritten / res.contentLength) * 100);
+              setDownloadProgress(percent);
+            }
+          });
+          
+          await download.promise;
+          setIsDownloadingModel(false);
+        }
+
+        // Ładujemy model z fizycznej ścieżki (nie z wirtualnych assets)
+        const ctx = await initContext({ filePath: modelPath, isModelInAssets: false });
         setWhisperContext(ctx);
       } catch (error) {
-        Alert.alert("Błąd", "Nie udało się załadować modelu ggml-base.bin");
+        setIsDownloadingModel(false);
+        Alert.alert("Błąd", "Nie udało się pobrać lub załadować modelu AI. Sprawdź połączenie z internetem.");
       }
     };
+    
     initWhisper();
     loadHistory();
   }, []);
@@ -168,7 +197,24 @@ export default function App() {
       {currentTab === 'NEW' ? (
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           
-          <TouchableOpacity style={styles.mainUploadBox} onPress={handleFileSelect}>
+          {/* PASEK POSTĘPU POBIERANIA MODELU */}
+          {isDownloadingModel && (
+            <View style={styles.downloadCard}>
+              <ActivityIndicator size="large" color={COLORS.purpleMain} />
+              <Text style={styles.downloadTitle}>Pobieranie silnika AI</Text>
+              <Text style={styles.downloadText}>To jednorazowa operacja (ok. 141 MB).</Text>
+              <Text style={styles.progressText}>{downloadProgress}%</Text>
+              <View style={styles.progressBarBg}>
+                <View style={[styles.progressBarFill, { width: `${downloadProgress}%` }]} />
+              </View>
+            </View>
+          )}
+
+          <TouchableOpacity 
+            style={[styles.mainUploadBox, (!whisperContext || isDownloadingModel) && {opacity: 0.5}]} 
+            onPress={handleFileSelect}
+            disabled={!whisperContext || isDownloadingModel}
+          >
             <Upload size={36} color={COLORS.purpleMain} />
             <Text style={styles.inputText}>Wgraj plik audio do transkrypcji</Text>
           </TouchableOpacity>
@@ -270,6 +316,14 @@ const styles = StyleSheet.create({
   activeTabText: { color: COLORS.goldMain },
   scrollContainer: { padding: 20, gap: 16 },
   
+  // Style pobierania
+  downloadCard: { backgroundColor: COLORS.white, borderRadius: 16, padding: 20, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+  downloadTitle: { fontSize: 16, fontWeight: '800', color: COLORS.purpleDark, marginTop: 12 },
+  downloadText: { fontSize: 13, color: '#6B7280', marginTop: 4, textAlign: 'center' },
+  progressText: { fontSize: 24, fontWeight: '900', color: COLORS.goldMain, marginTop: 12 },
+  progressBarBg: { width: '100%', height: 8, backgroundColor: '#F3F4F6', borderRadius: 4, marginTop: 8, overflow: 'hidden' },
+  progressBarFill: { height: '100%', backgroundColor: COLORS.purpleMain },
+
   mainUploadBox: { backgroundColor: COLORS.purpleLight, borderWidth: 2, borderStyle: 'dashed', borderColor: '#D8B4FE', borderRadius: 16, padding: 30, alignItems: 'center', justifyContent: 'center' },
   inputText: { fontSize: 16, fontWeight: '700', color: COLORS.purpleDark, marginTop: 12 },
   

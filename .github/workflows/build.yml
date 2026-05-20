@@ -25,24 +25,9 @@ jobs:
       - name: Install dependencies
         run: npm install
       
-      - name: Set up Android SDK build tools
-        run: |
-          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "build-tools;36.0.0" \
-            "platforms;android-36" \
-            "ndk;27.1.12297006"
-      
-      - name: Download Whisper model
-        run: |
-          mkdir -p android/app/src/main/assets
-          curl -L \
-            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" \
-            -o android/app/src/main/assets/ggml-base.bin
-      
       - name: Make Gradle executable
         run: chmod +x android/gradlew
       
-      # ZMIANA: Z assembleDebug na assembleRelease (zapieka kod JS wewnątrz pliku)
       - name: Build Release APK
         run: |
           cd android
@@ -50,7 +35,6 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
       
-      # ZMIANA: Pobieranie z folderu release
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
